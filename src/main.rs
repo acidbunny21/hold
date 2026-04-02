@@ -6,7 +6,7 @@ use crate::expiry_cancel::ExpiryCancel;
 use crate::handler::Handler;
 use crate::settler::Settler;
 use anyhow::Result;
-use cln_plugin::{Builder, RpcMethodBuilder};
+use cln_plugin::{Builder, HookBuilder, RpcMethodBuilder};
 use cln_rpc::ClnRpc;
 use cln_rpc::model::requests::GetinfoRequest;
 use messenger::Messenger;
@@ -67,14 +67,21 @@ async fn main() -> Result<()> {
         .with_logging(false)
         .option(crate::config::OPTION_OTEL_ENDPOINT);
 
+	let htlc_accepted = HookBuilder::new(
+		"htlc_accepted", hooks::htlc_accepted
+	).before(vec!["offers".to_string()]);
+	let onion_message_recv = HookBuilder::new(
+		"onion_message_recv", hooks::onion_message_recv
+	).before(vec!["offers".to_string()]);
+	let onion_message_recv_secret = HookBuilder::new(
+		"onion_message_recv_secret", hooks::onion_message_recv_secret
+	).before(vec!["offers".to_string()]);
+
     let plugin = match plugin
         .subscribe("block_added", notifications::block_added)
-        .hook("htlc_accepted", hooks::htlc_accepted)
-        .hook("onion_message_recv", hooks::onion_message_recv)
-        .hook(
-            "onion_message_recv_secret",
-            hooks::onion_message_recv_secret,
-        )
+        .hook_from_builder(htlc_accepted)
+        .hook_from_builder(onion_message_recv)
+        .hook_from_builder(onion_message_recv_secret)
         .rpcmethod_from_builder(
             RpcMethodBuilder::new("listholdinvoices", commands::list_invoices)
                 .description("Lists hold invoices")
